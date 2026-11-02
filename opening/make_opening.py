@@ -174,7 +174,10 @@ T = t_rev + rev_d
 NF = int(round(T * FPS))
 
 # ---------- 预渲染 ----------
-hook_big = load_bg(hook["image"], 1.06)
+_hook_src = hook["image"]
+hook_is_video = _hook_src.lower().endswith((".mp4", ".mov", ".webm", ".mkv"))
+hook_vid = VideoBg(_hook_src) if hook_is_video else None
+hook_big = None if hook_is_video else load_bg(_hook_src, 1.06)
 hook_txt = text_sprite(hook["text"], hook.get("size", 120))
 bg_bigs = [load_bg(imgs[i % len(imgs)]) for i in range(n)]
 word_txt = [text_sprite(w, rou.get("size", 160)) for w in words]
@@ -207,7 +210,10 @@ def render(i):
     t = i / FPS
     if t < t_hook:  # 引子
         u = t / t_hook
-        fr = zoom_frame(hook_big, 1.0 + 0.04 * u)
+        z = 1.0 + 0.04 * u
+        fr = hook_vid.get(int(t * FPS)).copy() if hook_is_video else zoom_frame(hook_big, z)
+        if HOOK_ANIM is not None:
+            fr = HOOK_ANIM.apply(fr, t, z)
         p = ease_out(t / 0.18)
         paste_center(fr, hook_txt, hook_cx, hook_cy, scale=1.15 - 0.15 * p, alpha=p)
         return fr
@@ -244,6 +250,93 @@ def render(i):
         p = ease_out(ct / 0.1)
         paste_center(fr, sp, char_x[j], rev_cy, scale=1.2 - 0.2 * p, alpha=p * fade)
     return fr
+
+
+# ---------- 引子动画：神经网络 ----------
+from PIL import ImageChops
+
+class NeuralAnim:
+    """思绪从一个点（人物头顶）升起，长成一张发光的神经网络，信号沿连线流动。
+    config: hook.anim = {"type": "neural", "origin": [x, y], "spread": 0.55, "nodes": 30,
+                         "color": [255, 232, 180], "grow": 1.3, "seed": 11}
+    origin 用画面比例坐标（0~1），一般放在引子图里人物的头顶。"""
+    def __init__(self, cfg, dur):
+        rnd = random.Random(cfg.get("seed", 11))
+        self.col = tuple(cfg.get("color", [255, 232, 180]))
+        self.dur = dur
+        self.grow = min(cfg.get("grow", 1.3), dur * 0.8)
+        ox, oy = cfg.get("origin", [0.5, 0.7])
+        self.O = (ox * W, oy * H)
+        R = cfg.get("spread", 0.55) * H
+        self.R = R
+        n = cfg.get("nodes", 30)
+        a0, a1 = cfg.get("angles", [-175, -5])
+        pts = []
+        while len(pts) < n:
+            ang = math.radians(rnd.uniform(a0, a1))
+            r = R * (0.12 + 0.88 * rnd.random() ** 0.8)
+            x, y = self.O[0] + r * math.cos(ang) * 1.25, self.O[1] + r * math.sin(ang)
+            if 30 < x < W - 30 and 30 < y < H - 30:
+                pts.append((x, y))
+        pts.sort(key=lambda p: math.dist(p, self.O))
+        self.nodes = [self.O] + pts
+        self.edges = []          # (a, b, t_start, t_end)
+        self.appear = [0.0]
+        for i in range(1, len(self.nodes)):
+            p = self.nodes[i]
+            par = min(range(i), key=lambda j: math.dist(self.nodes[j], p))
+            t1 = 0.08 + self.grow * (math.dist(p, self.O) / R) ** 0.9
+            self.appear.append(t1)
+            self.edges.append((par, i, max(0.02, t1 - 0.28), t1))
+        # 额外的近邻连线，让它更像网络而不是一棵树
+        for i in range(2, len(self.nodes)):
+            near = sorted(range(1, i), key=lambda j: math.dist(self.nodes[j], self.nodes[i]))[:2]
+            for j in near[1:]:
+                if math.dist(self.nodes[j], self.nodes[i]) < R * 0.35:
+                    t1 = self.appear[i] + 0.15
+                    self.edges.append((j, i, t1 - 0.2, t1))
+        self.phase = [rnd.random() for _ in self.edges]
+        self.blink = [rnd.uniform(0, 6.28) for _ in self.nodes]
+
+    def apply(self, fr, t, z=1.0):
+        cx, cy = W / 2, H / 2
+        O = self.O
+        def P_(p):  # 跟着底图一起推近；离起点越远的点越往上飘，起点固定在人物头顶
+            drift = 22 * t * min(1.0, math.dist(p, O) / self.R)
+            return (cx + (p[0] - cx) * z, cy + (p[1] - cy) * z - drift)
+        sharp = Image.new("L", (W, H), 0)
+        d = ImageDraw.Draw(sharp)
+        fade = min(1.0, t / 0.25)
+        for k, (a, b, t0, t1) in enumerate(self.edges):
+            if t < t0:
+                continue
+            u = min(1.0, (t - t0) / max(1e-3, t1 - t0))
+            u = ease_out(u)
+            pa, pb = P_(self.nodes[a]), P_(self.nodes[b])
+            pe = (pa[0] + (pb[0] - pa[0]) * u, pa[1] + (pb[1] - pa[1]) * u)
+            d.line([pa, pe], fill=int(150 * fade), width=2)
+            if u >= 1.0:  # 信号脉冲
+                ph = ((t - t1) / 0.8 + self.phase[k]) % 1.0
+                px, py = pa[0] + (pb[0] - pa[0]) * ph, pa[1] + (pb[1] - pa[1]) * ph
+                d.ellipse([px - 3.5, py - 3.5, px + 3.5, py + 3.5], fill=int(255 * fade))
+        for i, p in enumerate(self.nodes):
+            if t < self.appear[i]:
+                continue
+            g = ease_out(min(1.0, (t - self.appear[i]) / 0.18))
+            r = (3.0 + 2.0 * math.sin(t * 5 + self.blink[i]) * 0.5 + (4 if i == 0 else 0)) * g
+            x, y = P_(p)
+            d.ellipse([x - r, y - r, x + r, y + r], fill=int(255 * fade))
+        glow = sharp.filter(ImageFilter.GaussianBlur(9))
+        glow = glow.point(lambda v: min(255, int(v * 2.2)))
+        col = Image.new("RGB", (W, H), self.col)
+        black = Image.new("RGB", (W, H), (0, 0, 0))
+        fr = ImageChops.screen(fr, Image.composite(col, black, glow))
+        fr = ImageChops.screen(fr, Image.composite(col, black, sharp))
+        return fr
+
+
+_anim_cfg = hook.get("anim") or {}
+HOOK_ANIM = NeuralAnim(_anim_cfg, t_hook) if _anim_cfg.get("type") == "neural" else None
 
 
 # ---------- 咔哒音效 ----------

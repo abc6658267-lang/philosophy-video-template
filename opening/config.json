@@ -1,15 +1,75 @@
 {
   "out": "opening",
-  "size": [1920, 1080],
+  "size": [
+    1920,
+    1080
+  ],
   "fps": 30,
-  "grade": {"contrast": 1.08, "vignette": 0.45},
-  "hook": {"image": "assets/hook_01.jpg", "text": "今天我们要讲的是", "duration": 1.6, "size": 120, "y": 0.3},
+  "grade": {
+    "contrast": 1.08,
+    "vignette": 0.45
+  },
+  "hook": {
+    "image": "assets/hook_01.jpg",
+    "text": "今天我们要讲的是",
+    "duration": 2.4,
+    "size": 120,
+    "y": 0.3,
+    "anim": {
+      "type": "neural",
+      "origin": [
+        0.82,
+        0.553
+      ],
+      "spread": 0.62,
+      "nodes": 30,
+      "angles": [
+        -178,
+        -60
+      ],
+      "color": [
+        255,
+        232,
+        180
+      ],
+      "grow": 1.5,
+      "seed": 11
+    }
+  },
   "roulette": {
-    "words": ["存在主义", "虚无主义", "斯多葛主义", "犬儒主义", "享乐主义", "功利主义", "荒诞主义"],
-    "images": ["assets/bg_02.jpg","assets/bg_05.jpg","assets/bg_09.jpg","assets/bg_03.jpg","assets/bg_07.jpg","assets/bg_08.jpg","assets/bg_01.jpg"],
-    "click_sfx": "assets/sfx_dial_click.mp3", "sfx_speed": 1.25,
-    "last_word": 0.55, "last_dim": 0.25, "size": 160
+    "words": [
+      "存在主义",
+      "虚无主义",
+      "斯多葛主义",
+      "犬儒主义",
+      "享乐主义",
+      "功利主义",
+      "荒诞主义"
+    ],
+    "images": [
+      "assets/bg_02.jpg",
+      "assets/bg_05.jpg",
+      "assets/bg_09.jpg",
+      "assets/bg_03.jpg",
+      "assets/bg_07.jpg",
+      "assets/bg_08.jpg",
+      "assets/bg_01.jpg"
+    ],
+    "click_sfx": "assets/sfx_dial_click.mp3",
+    "sfx_speed": 1.25,
+    "last_word": 0.55,
+    "last_dim": 0.25,
+    "size": 160
   },
   "black": 0.5,
-  "reveal": {"title": "西西弗斯神话", "background": "assets/reveal_placeholder.jpg", "duration": 3.0, "size": 170, "y": 0.42, "type_step": 0.12, "type_delay": 0.15, "text_fade_out": 0.4}
+  "reveal": {
+    "title": "西西弗斯神话",
+    "background": "assets/reveal_placeholder.jpg",
+    "duration": 3.0,
+    "size": 170,
+    "y": 0.42,
+    "type_step": 0.12,
+    "type_delay": 0.15,
+    "text_fade_out": 0.4
+  }
 }
